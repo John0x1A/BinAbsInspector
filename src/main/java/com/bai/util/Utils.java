@@ -335,6 +335,15 @@ public class Utils {
             Logging.error("Empty symbol table");
             return new ArrayList<>();
         }
+
+        // OS X ABI for Mach-O format mangles C symbols by prepending an underscore (_) to symbols
+        if (GlobalState.currentProgram.getExecutableFormat().equals(MachoLoader.MACH_O_NAME)) {
+            List<String> machOMangledNames = symbolNames.stream()
+                    .map(name -> "_" + name)
+                    .toList();
+            symbolNames.addAll(machOMangledNames);
+        }
+
         return Stream.generate(() -> null)
                 .takeWhile(x -> symbolIterator.hasNext())
                 .map(n -> symbolIterator.next())
