@@ -12,10 +12,15 @@ import ghidra.app.cmd.function.ApplyFunctionSignatureCmd;
 import ghidra.app.util.bin.MemoryByteProvider;
 import ghidra.app.util.bin.format.elf.ElfException;
 import ghidra.app.util.bin.format.elf.ElfHeader;
+import ghidra.app.util.bin.format.macho.commands.EntryPointCommand;
+import ghidra.app.util.bin.format.macho.commands.LoadCommand;
+import ghidra.app.util.bin.format.macho.commands.LoadCommandTypes;
 import ghidra.app.util.bin.format.pe.PortableExecutable;
 import ghidra.app.util.bin.format.pe.OptionalHeader;
+import ghidra.app.util.bin.format.macho.MachHeader;
 import ghidra.app.util.opinion.ElfLoader;
 import ghidra.app.util.opinion.PeLoader;
+import ghidra.app.util.opinion.MachoLoader;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.data.FunctionDefinitionDataType;
 import ghidra.program.model.data.IntegerDataType;
@@ -343,7 +348,7 @@ public class Utils {
     }
 
     /**
-     * Get the entry function of the ELF/PE executable.
+     * Get the entry function of the ELF/PE/MACH-O executable.
      * @return
      */
     public static Function getEntryFunction() {
@@ -371,7 +376,27 @@ public class Utils {
                     entryAddress = entryAddress.add(GlobalState.currentProgram.getImageBase().getOffset());
                 }
                 break;
+                case MachoLoader.MACH_O_NAME: {
+                    MachHeader header = new MachHeader(provider);
+                    header.parse();
 
+                    if (!header.parseAndCheck(LoadCommandTypes.LC_MAIN)) {
+                        throw new RuntimeException("Could not locate the entrypoint of the Mach-O binary executable.");
+                    }
+
+                    Optional<LoadCommand> loadCommandOptional = header.getLoadCommands().stream()
+                            .filter(loadCommand -> loadCommand.getCommandType() == LoadCommandTypes.LC_MAIN)
+                            .findFirst();
+
+                    if (loadCommandOptional.isEmpty()) {
+                        throw new RuntimeException("Could not find the LC_MAIN load command in the Mach-O header.");
+                    }
+
+                    entryAddress = (GlobalState.currentProgram.getImageBase())
+                            .add(((EntryPointCommand) loadCommandOptional.get()).getEntryOffset());
+
+                }
+                break;
                 default:
                     throw new Exception("Unsupported file format.");
             }
